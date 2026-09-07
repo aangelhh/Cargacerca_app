@@ -1,4 +1,4 @@
-package es.cargacerca.app.ui.explore
+package es.cargacerca.app.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import es.cargacerca.app.model.ChargingStation
 import es.cargacerca.app.model.demoStations
+import es.cargacerca.app.ui.detail.ChargerDetailScreen
 import java.util.Locale
 
 private val Success = Color(0xFF41E29A)
@@ -65,14 +66,21 @@ private val CardBorder = Color(0xFF17314C)
 private val CardBackground = Color(0xFF0C1B2C)
 private val ChipBackground = Color(0xFF10243A)
 
-private data class BottomDestination(
-    val label: String,
-    val icon: ImageVector
-)
+private data class BottomDestination(val label: String, val icon: ImageVector)
 
 @Composable
 fun CargaCercaHome() {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedStation by remember { mutableStateOf<ChargingStation?>(null) }
+
+    val station = selectedStation
+    if (station != null) {
+        ChargerDetailScreen(
+            station = station,
+            onBack = { selectedStation = null }
+        )
+        return
+    }
 
     val destinations = remember {
         listOf(
@@ -86,10 +94,7 @@ fun CargaCercaHome() {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar(
-                containerColor = Color(0xFF081522),
-                tonalElevation = 0.dp
-            ) {
+            NavigationBar(containerColor = Color(0xFF081522), tonalElevation = 0.dp) {
                 destinations.forEachIndexed { index, destination ->
                     NavigationBarItem(
                         selected = selectedTab == index,
@@ -109,7 +114,10 @@ fun CargaCercaHome() {
         }
     ) { innerPadding ->
         when (selectedTab) {
-            0 -> ExploreScreen(Modifier.padding(innerPadding))
+            0 -> ExploreScreen(
+                modifier = Modifier.padding(innerPadding),
+                onStationClick = { selectedStation = it }
+            )
             else -> ComingSoonScreen(
                 modifier = Modifier.padding(innerPadding),
                 title = destinations[selectedTab].label
@@ -119,7 +127,10 @@ fun CargaCercaHome() {
 }
 
 @Composable
-private fun ExploreScreen(modifier: Modifier = Modifier) {
+private fun ExploreScreen(
+    modifier: Modifier = Modifier,
+    onStationClick: (ChargingStation) -> Unit
+) {
     var query by remember { mutableStateOf("") }
     var availableOnly by remember { mutableStateOf(false) }
     var fastOnly by remember { mutableStateOf(false) }
@@ -146,10 +157,7 @@ private fun ExploreScreen(modifier: Modifier = Modifier) {
         ),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item {
-            Header()
-        }
-
+        item { Header() }
         item {
             OutlinedTextField(
                 value = query,
@@ -175,7 +183,6 @@ private fun ExploreScreen(modifier: Modifier = Modifier) {
                 )
             )
         }
-
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
@@ -192,60 +199,42 @@ private fun ExploreScreen(modifier: Modifier = Modifier) {
                         onClick = { fastOnly = !fastOnly }
                     )
                 }
-                item {
-                    ModernFilterChip(label = "CCS2", selected = false, onClick = {})
-                }
-                item {
-                    ModernFilterChip(label = "Precio", selected = false, onClick = {})
-                }
+                item { ModernFilterChip("CCS2", false, {}) }
+                item { ModernFilterChip("Precio", false, {}) }
             }
         }
-
-        item {
-            AvailabilityHero()
-        }
-
+        item { AvailabilityHero() }
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Mejores opciones",
+                        "Mejores opciones",
                         color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
                         fontSize = 20.sp
                     )
                     Text(
-                        text = "Ordenadas por disponibilidad, precio y distancia",
+                        "Ordenadas por disponibilidad, precio y distancia",
                         color = Muted,
                         fontSize = 12.sp
                     )
                 }
                 Text(
-                    text = "${filteredStations.size} cerca",
+                    "${filteredStations.size} cerca",
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 12.sp
                 )
             }
         }
-
-        if (filteredStations.isEmpty()) {
-            item {
-                EmptyState()
-            }
-        } else {
-            items(filteredStations, key = { it.id }) { station ->
-                StationCard(station)
-            }
+        items(filteredStations, key = { it.id }) { station ->
+            StationCard(station = station, onClick = { onStationClick(station) })
         }
-
-        item {
-            AdPlaceholder()
-        }
+        item { AdPlaceholder() }
     }
 }
 
@@ -258,21 +247,14 @@ private fun Header() {
     ) {
         Column {
             Text(
-                text = "CargaCerca",
+                "CargaCerca",
                 color = MaterialTheme.colorScheme.primary,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Black
             )
-            Text(
-                text = "Encuentra tu mejor carga",
-                color = Muted,
-                fontSize = 13.sp
-            )
+            Text("Encuentra tu mejor carga", color = Muted, fontSize = 13.sp)
         }
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF10243A)
-        ) {
+        Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFF10243A)) {
             Row(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -291,20 +273,11 @@ private fun Header() {
 }
 
 @Composable
-private fun ModernFilterChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
+private fun ModernFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = {
-            Text(
-                text = label,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
-            )
-        },
+        label = { Text(label, fontWeight = FontWeight.SemiBold) },
         leadingIcon = if (selected) {
             {
                 Icon(
@@ -359,24 +332,16 @@ private fun AvailabilityHero() {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "11 cargadores libres ahora",
+                    "11 cargadores libres ahora",
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp
                 )
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    text = "Hay 18 puntos rápidos en un radio de 6 km",
-                    color = Muted,
-                    fontSize = 12.sp
-                )
+                Text("Hay 18 puntos rápidos en un radio de 6 km", color = Muted, fontSize = 12.sp)
             }
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xFF123A2B)
-            ) {
+            Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFF123A2B)) {
                 Text(
-                    text = "EN VIVO",
+                    "EN VIVO",
                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
                     color = Success,
                     fontSize = 10.sp,
@@ -388,11 +353,11 @@ private fun AvailabilityHero() {
 }
 
 @Composable
-private fun StationCard(station: ChargingStation) {
+private fun StationCard(station: ChargingStation, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { },
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = CardBackground),
         border = androidx.compose.foundation.BorderStroke(
@@ -426,7 +391,7 @@ private fun StationCard(station: ChargingStation) {
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = station.name,
+                                station.name,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
@@ -435,33 +400,27 @@ private fun StationCard(station: ChargingStation) {
                             )
                             if (station.isRecommended) {
                                 Text(
-                                    text = "  MEJOR",
+                                    "  MEJOR",
                                     color = MaterialTheme.colorScheme.primary,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Black
                                 )
                             }
                         }
-                        Text(
-                            text = station.operator,
-                            color = Muted,
-                            fontSize = 12.sp
-                        )
+                        Text(station.operator, color = Muted, fontSize = 12.sp)
                     }
                 }
                 StatusPill(station.available)
             }
 
             Spacer(Modifier.height(13.dp))
-
             Text(
-                text = station.address,
+                station.address,
                 color = Muted,
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-
             Spacer(Modifier.height(14.dp))
 
             Row(
@@ -482,7 +441,6 @@ private fun StationCard(station: ChargingStation) {
             }
 
             Spacer(Modifier.height(13.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -495,12 +453,7 @@ private fun StationCard(station: ChargingStation) {
                         AvailabilityLabel("${station.outOfService} fuera", Color(0xFFFF6B6B))
                     }
                 }
-                Text(
-                    text = station.connector,
-                    color = Muted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Text(station.connector, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -512,7 +465,7 @@ private fun StatusPill(available: Int) {
     val background = if (available > 0) Color(0xFF123A2B) else Color(0xFF402125)
     Surface(shape = RoundedCornerShape(12.dp), color = background) {
         Text(
-            text = if (available > 0) "LIBRE" else "LLENO",
+            if (available > 0) "LIBRE" else "LLENO",
             modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
             color = color,
             fontSize = 10.sp,
@@ -523,11 +476,7 @@ private fun StatusPill(available: Int) {
 
 @Composable
 private fun MetricPill(text: String, icon: ImageVector, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(13.dp),
-        color = Color(0xFF10243A)
-    ) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(13.dp), color = Color(0xFF10243A)) {
         Row(
             modifier = Modifier.padding(horizontal = 9.dp, vertical = 9.dp),
             horizontalArrangement = Arrangement.Center,
@@ -541,7 +490,7 @@ private fun MetricPill(text: String, icon: ImageVector, modifier: Modifier = Mod
             )
             Spacer(Modifier.size(5.dp))
             Text(
-                text = text,
+                text,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -554,39 +503,9 @@ private fun MetricPill(text: String, icon: ImageVector, modifier: Modifier = Mod
 @Composable
 private fun AvailabilityLabel(text: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(7.dp)
-                .background(color, CircleShape)
-        )
+        Box(modifier = Modifier.size(7.dp).background(color, CircleShape))
         Spacer(Modifier.size(5.dp))
-        Text(text = text, color = Muted, fontSize = 10.sp)
-    }
-}
-
-@Composable
-private fun EmptyState() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = CardBackground)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                Icons.Rounded.Search,
-                contentDescription = null,
-                tint = Muted,
-                modifier = Modifier.size(34.dp)
-            )
-            Spacer(Modifier.height(10.dp))
-            Text("No encontramos cargadores", color = MaterialTheme.colorScheme.onBackground)
-            Text("Prueba con otros filtros", color = Muted, fontSize = 12.sp)
-        }
+        Text(text, color = Muted, fontSize = 10.sp)
     }
 }
 
@@ -612,20 +531,18 @@ private fun AdPlaceholder() {
 @Composable
 private fun ComingSoonScreen(modifier: Modifier, title: String) {
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = title,
+                title,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(6.dp))
-            Text("Lo construiremos en la siguiente feature", color = Muted, fontSize = 13.sp)
+            Text("Lo construiremos en otra feature", color = Muted, fontSize = 13.sp)
         }
     }
 }
