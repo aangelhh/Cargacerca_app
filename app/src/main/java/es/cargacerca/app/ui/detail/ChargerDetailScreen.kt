@@ -73,13 +73,11 @@ fun ChargerDetailScreen(
         KeyMetrics(station)
         ConnectorCard(station)
         LocationCard(station)
-        LiveInfoCard()
+        LiveInfoCard(station)
         Spacer(Modifier.height(4.dp))
         Button(
             onClick = onNavigate,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
+            modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -91,10 +89,12 @@ fun ChargerDetailScreen(
             Text("Ir ahora", fontWeight = FontWeight.Black, fontSize = 16.sp)
         }
         Text(
-            text = "Los estados y precios son datos demo en esta fase del desarrollo.",
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 18.dp),
+            text = if (station.availabilityKnown) {
+                "Datos de desarrollo. La integración de disponibilidad en vivo llegará en una feature separada."
+            } else {
+                "Ubicación y características obtenidas de ${station.dataSource}. La ocupación en tiempo real todavía no está disponible."
+            },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
             color = Muted,
             fontSize = 10.sp
         )
@@ -110,26 +110,18 @@ private fun DetailTopBar(onBack: () -> Unit, onFavorite: () -> Unit) {
     ) {
         Surface(shape = CircleShape, color = Color(0xFF10243A)) {
             IconButton(onClick = onBack) {
-                Icon(
-                    Icons.Rounded.ArrowBack,
-                    contentDescription = "Volver",
-                    tint = MaterialTheme.colorScheme.onBackground
-                )
+                Icon(Icons.Rounded.ArrowBack, contentDescription = "Volver", tint = MaterialTheme.colorScheme.onBackground)
             }
         }
         Text(
-            text = "Detalle del cargador",
+            "Detalle del cargador",
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.Bold,
             fontSize = 15.sp
         )
         Surface(shape = CircleShape, color = Color(0xFF10243A)) {
             IconButton(onClick = onFavorite) {
-                Icon(
-                    Icons.Rounded.FavoriteBorder,
-                    contentDescription = "Favorito",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.Rounded.FavoriteBorder, contentDescription = "Favorito", tint = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -146,45 +138,23 @@ private fun StationHero(station: ChargingStation) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .background(Color(0xFF123C5E), RoundedCornerShape(17.dp)),
+                    modifier = Modifier.size(54.dp).background(Color(0xFF123C5E), RoundedCornerShape(17.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Rounded.EvStation,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(31.dp)
-                    )
+                    Icon(Icons.Rounded.EvStation, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(31.dp))
                 }
                 Spacer(Modifier.size(13.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     if (station.isRecommended) {
-                        Text(
-                            text = "MEJOR OPCIÓN",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Black
-                        )
+                        Text("MEJOR OPCIÓN", color = MaterialTheme.colorScheme.primary, fontSize = 9.sp, fontWeight = FontWeight.Black)
                     }
-                    Text(
-                        text = station.name,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Black
-                    )
+                    Text(station.name, color = MaterialTheme.colorScheme.onBackground, fontSize = 22.sp, fontWeight = FontWeight.Black)
                     Text(station.operator, color = Muted, fontSize = 13.sp)
                 }
             }
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Rounded.LocationOn,
-                    contentDescription = null,
-                    tint = Muted,
-                    modifier = Modifier.size(16.dp)
-                )
+                Icon(Icons.Rounded.LocationOn, contentDescription = null, tint = Muted, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.size(6.dp))
                 Text(station.address, color = Muted, fontSize = 12.sp)
             }
@@ -207,56 +177,58 @@ private fun AvailabilityCard(station: ChargingStation) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
+                    Text("Disponibilidad", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text(
-                        "Disponibilidad",
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
+                        if (station.availabilityKnown) "Estado de los conectores" else "El proveedor no publica ocupación en vivo",
+                        color = Muted,
+                        fontSize = 11.sp
                     )
-                    Text("Estado de los conectores", color = Muted, fontSize = 11.sp)
                 }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (station.available > 0) Color(0xFF123A2B) else Color(0xFF402125)
-                ) {
+                val badgeText = when {
+                    !station.availabilityKnown -> "SIN ESTADO"
+                    station.available > 0 -> "DISPONIBLE"
+                    else -> "LLENO"
+                }
+                val badgeColor = when {
+                    !station.availabilityKnown -> Muted
+                    station.available > 0 -> Success
+                    else -> Danger
+                }
+                val badgeBackground = when {
+                    !station.availabilityKnown -> Color(0xFF10243A)
+                    station.available > 0 -> Color(0xFF123A2B)
+                    else -> Color(0xFF402125)
+                }
+                Surface(shape = RoundedCornerShape(12.dp), color = badgeBackground) {
                     Text(
-                        text = if (station.available > 0) "DISPONIBLE" else "LLENO",
+                        badgeText,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        color = if (station.available > 0) Success else Danger,
+                        color = badgeColor,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Black
                     )
                 }
             }
             Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                AvailabilityMetric("${station.available}", "Libres", Success, Modifier.weight(1f))
-                AvailabilityMetric("${station.occupied}", "Ocupados", Warning, Modifier.weight(1f))
-                AvailabilityMetric("${station.outOfService}", "Fuera", Danger, Modifier.weight(1f))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (station.availabilityKnown) {
+                    AvailabilityMetric("${station.available}", "Libres", Success, Modifier.weight(1f))
+                    AvailabilityMetric("${station.occupied}", "Ocupados", Warning, Modifier.weight(1f))
+                    AvailabilityMetric("${station.outOfService}", "Fuera", Danger, Modifier.weight(1f))
+                } else {
+                    AvailabilityMetric("—", "Libres", Muted, Modifier.weight(1f))
+                    AvailabilityMetric("—", "Ocupados", Muted, Modifier.weight(1f))
+                    AvailabilityMetric("—", "Fuera", Muted, Modifier.weight(1f))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AvailabilityMetric(
-    value: String,
-    label: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xFF10243A)
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 13.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+private fun AvailabilityMetric(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(16.dp), color = Color(0xFF10243A)) {
+        Column(modifier = Modifier.padding(vertical = 13.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(value, color = color, fontSize = 23.sp, fontWeight = FontWeight.Black)
             Text(label, color = Muted, fontSize = 10.sp)
         }
@@ -265,19 +237,16 @@ private fun AvailabilityMetric(
 
 @Composable
 private fun KeyMetrics(station: ChargingStation) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailMetric(
             icon = Icons.Rounded.Bolt,
-            value = "${station.powerKw} kW",
+            value = if (station.powerKw > 0) "${station.powerKw} kW" else "—",
             label = "Potencia",
             modifier = Modifier.weight(1f)
         )
         DetailMetric(
             icon = Icons.Rounded.EvStation,
-            value = station.pricePerKwh?.let { String.format(Locale.US, "%.2f €", it) } ?: "--",
+            value = station.pricePerKwh?.let { String.format(Locale.US, "%.2f €", it) } ?: "—",
             label = "por kWh",
             modifier = Modifier.weight(1f)
         )
@@ -291,12 +260,7 @@ private fun KeyMetrics(station: ChargingStation) {
 }
 
 @Composable
-private fun DetailMetric(
-    icon: ImageVector,
-    value: String,
-    label: String,
-    modifier: Modifier = Modifier
-) {
+private fun DetailMetric(icon: ImageVector, value: String, label: String, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(18.dp),
@@ -304,24 +268,12 @@ private fun DetailMetric(
         border = androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 14.dp, horizontal = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             Spacer(Modifier.height(7.dp))
-            Text(
-                value,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp
-            )
+            Text(value, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             Text(label, color = Muted, fontSize = 9.sp)
         }
     }
@@ -336,47 +288,32 @@ private fun ConnectorCard(station: ChargingStation) {
         border = androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
     ) {
         Column(modifier = Modifier.padding(17.dp)) {
-            Text(
-                "Conectores",
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
+            Text("Conectores", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(Color(0xFF112B43), RoundedCornerShape(13.dp)),
+                    modifier = Modifier.size(42.dp).background(Color(0xFF112B43), RoundedCornerShape(13.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Rounded.Bolt,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    Icon(Icons.Rounded.Bolt, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 }
                 Spacer(Modifier.size(11.dp))
                 Column(modifier = Modifier.weight(1f)) {
+                    Text(station.connector, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold)
                     Text(
-                        station.connector,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.Bold
+                        if (station.powerKw > 0) "Hasta ${station.powerKw} kW" else "Potencia no indicada",
+                        color = Muted,
+                        fontSize = 11.sp
                     )
-                    Text("Hasta ${station.powerKw} kW", color = Muted, fontSize = 11.sp)
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Rounded.CheckCircle,
-                        contentDescription = null,
-                        tint = Success,
-                        modifier = Modifier.size(17.dp)
-                    )
-                    Spacer(Modifier.size(5.dp))
-                    Text("${station.available} libres", color = Success, fontSize = 11.sp)
+                if (station.availabilityKnown) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = Success, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.size(5.dp))
+                        Text("${station.available} libres", color = Success, fontSize = 11.sp)
+                    }
+                } else {
+                    Text("Estado n/d", color = Muted, fontSize = 11.sp)
                 }
             }
         }
@@ -392,20 +329,11 @@ private fun LocationCard(station: ChargingStation) {
         border = androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
     ) {
         Column(modifier = Modifier.padding(17.dp)) {
-            Text(
-                "Ubicación",
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
+            Text("Ubicación", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(Modifier.height(8.dp))
             Text(station.address, color = Muted, fontSize = 12.sp)
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = {},
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(15.dp)
-            ) {
+            OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp)) {
                 Icon(Icons.Rounded.LocationOn, contentDescription = null)
                 Spacer(Modifier.size(7.dp))
                 Text("Ver en el mapa")
@@ -415,34 +343,35 @@ private fun LocationCard(station: ChargingStation) {
 }
 
 @Composable
-private fun LiveInfoCard() {
+private fun LiveInfoCard(station: ChargingStation) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         color = Color(0xFF0B2135),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF16466C))
     ) {
-        Row(
-            modifier = Modifier.padding(15.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Rounded.Schedule,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
+        Row(modifier = Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "Información en vivo",
+                    if (station.availabilityKnown) "Información en vivo" else "Fuente de datos",
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp
                 )
-                Text("Última actualización · hace unos segundos", color = Muted, fontSize = 10.sp)
+                Text(
+                    if (station.availabilityKnown) "Datos demo en esta fase" else station.dataSource,
+                    color = Muted,
+                    fontSize = 10.sp
+                )
             }
-            Text("LIVE", color = Success, fontWeight = FontWeight.Black, fontSize = 10.sp)
+            Text(
+                if (station.availabilityKnown) "DEMO" else "REAL",
+                color = if (station.availabilityKnown) Warning else Success,
+                fontWeight = FontWeight.Black,
+                fontSize = 10.sp
+            )
         }
     }
 }

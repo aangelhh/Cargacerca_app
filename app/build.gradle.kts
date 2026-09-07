@@ -11,8 +11,8 @@ android {
         applicationId = "es.cargacerca.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.6.0"
     }
 
     buildTypes {
@@ -45,9 +45,8 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-
-    // OpenGL backend keeps the map compatible with older Android devices.
-    implementation("org.maplibre.gl:android-sdk-opengl:13.4.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.maplibre.gl:android-sdk:13.4.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
