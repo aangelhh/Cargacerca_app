@@ -8,18 +8,15 @@ Primera aplicación iOS de CargaCerca conectada al módulo Kotlin Multiplatform 
 2. Selecciona un simulador iPhone o un iPhone físico.
 3. Compila con **Run**.
 
-El proyecto usa integración directa de Kotlin Multiplatform. Antes de compilar Swift, Xcode ejecuta:
+El proyecto usa integración directa de Kotlin Multiplatform. Antes de compilar Swift, Xcode ejecuta el framework compartido mediante `:shared:embedAndSignAppleFrameworkForXcode`.
 
-```bash
-gradle :shared:embedAndSignAppleFrameworkForXcode
-```
-
-Si más adelante añadimos el Gradle Wrapper, el script lo usará automáticamente.
+El script usa `./gradlew` cuando añadamos el Gradle Wrapper y, mientras tanto, utiliza `gradle` instalado en el Mac.
 
 ## Estado actual
 
-- SwiftUI host funcional preparado para iPhone.
+- SwiftUI host preparado para iPhone.
 - Framework `CargaCercaShared` para dispositivo y simulador Apple Silicon.
 - La primera pantalla lee modelos/datos desde Kotlin compartido.
 - Android sigue usando el mismo módulo `shared`.
+- CI iOS valida el framework y el proyecto Xcode en un runner Apple Silicon.
 - GPS, mapa y UI completa se migrarán de forma incremental.
