@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import CargaCercaShared
 
@@ -96,7 +97,7 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 metric("bolt.fill", power > 0 ? "\(power) kW" : "Potencia —")
                 metric("location.fill", String(format: "%.1f km", distance))
-                metric("ev.charger.fill", catalog.stationConnector(index: kotlinIndex))
+                metric("bolt.car.fill", catalog.stationConnector(index: kotlinIndex))
             }
         }
         .padding(16)
