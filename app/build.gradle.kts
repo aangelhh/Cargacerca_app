@@ -11,8 +11,8 @@ android {
         applicationId = "es.cargacerca.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.6.0"
+        versionCode = 7
+        versionName = "0.7.0"
     }
 
     buildTypes {
@@ -36,6 +36,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":shared"))
+
     val composeBom = platform("androidx.compose:compose-bom:2026.06.00")
     implementation(composeBom)
 

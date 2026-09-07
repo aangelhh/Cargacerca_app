@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CargaCerca"
 include(":app")
+include(":shared")
