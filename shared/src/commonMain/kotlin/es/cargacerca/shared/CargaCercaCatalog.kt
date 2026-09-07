@@ -1,17 +1,27 @@
 package es.cargacerca.shared
 
+import es.cargacerca.app.data.OpenStreetMapChargingStationRepository
 import es.cargacerca.app.model.ChargingStation
 import es.cargacerca.app.model.demoStations
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
- * Small Swift-friendly facade over the shared charging-station model.
+ * Swift-friendly facade over the shared charging-station model and repository.
  *
- * This is intentionally simple for the first iOS host: it proves that the
- * iPhone app is reading the same Kotlin data that Android uses. As more UI is
- * migrated to Compose Multiplatform this facade can shrink or disappear.
+ * Android and iOS now use the same model and the same remote charging-station
+ * loader. The facade keeps Swift interop deliberately small while the UI is
+ * migrated to Compose Multiplatform.
  */
 class CargaCercaCatalog {
-    fun stationCount(): Int = demoStations.size
+    private val repository = OpenStreetMapChargingStationRepository()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    private var stations: List<ChargingStation> = demoStations
+
+    fun stationCount(): Int = stations.size
 
     fun stationName(index: Int): String = station(index).name
 
@@ -25,6 +35,12 @@ class CargaCercaCatalog {
 
     fun stationConnector(index: Int): String = station(index).connector
 
+    fun stationLatitude(index: Int): Double = station(index).latitude
+
+    fun stationLongitude(index: Int): Double = station(index).longitude
+
+    fun stationDataSource(index: Int): String = station(index).dataSource
+
     fun stationAvailabilityLabel(index: Int): String {
         val item = station(index)
         return if (item.availabilityKnown) {
@@ -34,8 +50,31 @@ class CargaCercaCatalog {
         }
     }
 
+    fun loadNearby(
+        latitude: Double,
+        longitude: Double,
+        onComplete: (Boolean) -> Unit
+    ) {
+        scope.launch {
+            val loaded = repository.loadNearby(latitude, longitude)
+            if (loaded.isNotEmpty()) {
+                stations = loaded
+            }
+            onComplete(loaded.isNotEmpty())
+        }
+    }
+
+    fun resetToDemo() {
+        stations = demoStations
+    }
+
+    fun isUsingRemoteData(): Boolean =
+        stations.firstOrNull()?.dataSource == "OpenStreetMap"
+
     fun sharedVersion(): String = "0.7.0"
 
-    private fun station(index: Int): ChargingStation =
-        demoStations.getOrElse(index) { demoStations.first() }
+    private fun station(index: Int): ChargingStation {
+        val active = stations.ifEmpty { demoStations }
+        return active.getOrElse(index) { active.first() }
+    }
 }
