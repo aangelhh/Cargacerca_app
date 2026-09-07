@@ -28,6 +28,19 @@ kotlin {
     }
 
     sourceSets {
+        commonMain.dependencies {
+            implementation("io.ktor:ktor-client-core:3.5.2")
+            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+        }
+
+        androidMain.dependencies {
+            implementation("io.ktor:ktor-client-okhttp:3.5.2")
+        }
+
+        iosMain.dependencies {
+            implementation("io.ktor:ktor-client-darwin:3.5.2")
+        }
+
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
