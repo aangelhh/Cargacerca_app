@@ -58,6 +58,7 @@ import es.cargacerca.app.model.ChargingStation
 import es.cargacerca.app.model.demoStations
 import es.cargacerca.app.ui.compare.ComparisonScreen
 import es.cargacerca.app.ui.detail.ChargerDetailScreen
+import es.cargacerca.app.ui.map.ChargerMapScreen
 import java.util.Locale
 
 private val Success = Color(0xFF41E29A)
@@ -139,6 +140,7 @@ private fun ExploreScreen(
     var query by remember { mutableStateOf("") }
     var availableOnly by remember { mutableStateOf(false) }
     var fastOnly by remember { mutableStateOf(false) }
+    var showMap by remember { mutableStateOf(false) }
 
     val filteredStations = demoStations.filter { station ->
         val matchesQuery = query.isBlank() ||
@@ -148,6 +150,16 @@ private fun ExploreScreen(
         val matchesAvailability = !availableOnly || station.available > 0
         val matchesPower = !fastOnly || station.powerKw >= 150
         matchesQuery && matchesAvailability && matchesPower
+    }
+
+    if (showMap) {
+        ChargerMapScreen(
+            modifier = modifier,
+            stations = filteredStations,
+            onBack = { showMap = false },
+            onStationClick = onStationClick
+        )
+        return
     }
 
     LazyColumn(
@@ -207,6 +219,12 @@ private fun ExploreScreen(
                 item { ModernFilterChip("CCS2", false, {}) }
                 item { ModernFilterChip("Precio", false, {}) }
             }
+        }
+        item {
+            MapEntryCard(
+                stationCount = filteredStations.size,
+                onClick = { showMap = true }
+            )
         }
         item { AvailabilityHero() }
         item {
@@ -273,6 +291,61 @@ private fun Header() {
                 )
                 Text("Madrid", color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp)
             }
+        }
+    }
+}
+
+@Composable
+private fun MapEntryCard(stationCount: Int, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFF0B2135),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF16466C))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(11.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(Color(0xFF123C5E), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Rounded.Map,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Column {
+                    Text(
+                        "Ver mapa",
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "$stationCount cargadores · mapa interactivo + GPS",
+                        color = Muted,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+            Text(
+                "ABRIR",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Black,
+                fontSize = 10.sp
+            )
         }
     }
 }

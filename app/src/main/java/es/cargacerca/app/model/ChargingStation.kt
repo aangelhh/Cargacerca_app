@@ -12,6 +12,8 @@ data class ChargingStation(
     val occupied: Int,
     val outOfService: Int,
     val connector: String,
+    val latitude: Double,
+    val longitude: Double,
     val isRecommended: Boolean = false
 )
 
@@ -28,6 +30,8 @@ val demoStations = listOf(
         occupied = 1,
         outOfService = 0,
         connector = "CCS2",
+        latitude = 40.4066,
+        longitude = -3.6891,
         isRecommended = true
     ),
     ChargingStation(
@@ -41,7 +45,9 @@ val demoStations = listOf(
         available = 2,
         occupied = 2,
         outOfService = 0,
-        connector = "CCS2"
+        connector = "CCS2",
+        latitude = 40.4051,
+        longitude = -3.7027
     ),
     ChargingStation(
         id = "tesla-bernabeu",
@@ -54,7 +60,9 @@ val demoStations = listOf(
         available = 7,
         occupied = 5,
         outOfService = 0,
-        connector = "CCS2"
+        connector = "CCS2",
+        latitude = 40.4531,
+        longitude = -3.6883
     ),
     ChargingStation(
         id = "repsol-m30",
@@ -67,6 +75,8 @@ val demoStations = listOf(
         available = 1,
         occupied = 1,
         outOfService = 1,
-        connector = "CCS2"
+        connector = "CCS2",
+        latitude = 40.4088,
+        longitude = -3.6692
     )
 )
