@@ -1,6 +1,61 @@
+import Combine
+import CoreLocation
 import Foundation
 import SwiftUI
 import CargaCercaShared
+
+@MainActor
+final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+
+    @Published var coordinate: CLLocationCoordinate2D?
+    @Published var statusText = "Ubicación pendiente"
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    func requestLocation() {
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            statusText = "Solicitando permiso de ubicación…"
+            manager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
+            statusText = "Obteniendo tu ubicación…"
+            manager.requestLocation()
+        case .denied, .restricted:
+            statusText = "Ubicación no disponible · usando Madrid"
+        @unknown default:
+            statusText = "Ubicación no disponible · usando Madrid"
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            statusText = "Obteniendo tu ubicación…"
+            manager.requestLocation()
+        case .denied, .restricted:
+            statusText = "Ubicación no disponible · usando Madrid"
+        case .notDetermined:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else { return }
+        coordinate = location.coordinate
+        statusText = "Usando tu ubicación"
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        statusText = "No se pudo obtener el GPS · usando Madrid"
+    }
+}
 
 @MainActor
 final class CatalogViewModel: ObservableObject {
@@ -10,29 +65,50 @@ final class CatalogViewModel: ObservableObject {
     @Published var loadMessage = "Datos compartidos listos"
     @Published var revision = 0
 
-    private var hasLoaded = false
+    private var hasLoadedFallback = false
+    private var lastLoadedLatitude: Double?
+    private var lastLoadedLongitude: Double?
 
     func loadMadridIfNeeded() {
-        guard !hasLoaded else { return }
-        hasLoaded = true
-        loadNearby(latitude: 40.4168, longitude: -3.7038)
+        guard !hasLoadedFallback else { return }
+        hasLoadedFallback = true
+        loadNearby(latitude: 40.4168, longitude: -3.7038, sourceLabel: "Madrid")
     }
 
     func reloadMadrid() {
-        loadNearby(latitude: 40.4168, longitude: -3.7038)
+        loadNearby(latitude: 40.4168, longitude: -3.7038, sourceLabel: "Madrid")
     }
 
-    private func loadNearby(latitude: Double, longitude: Double) {
+    func loadUserLocation(_ coordinate: CLLocationCoordinate2D) {
+        if let lastLat = lastLoadedLatitude,
+           let lastLon = lastLoadedLongitude,
+           abs(lastLat - coordinate.latitude) < 0.0005,
+           abs(lastLon - coordinate.longitude) < 0.0005 {
+            return
+        }
+
+        loadNearby(
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            sourceLabel: "tu ubicación"
+        )
+    }
+
+    private func loadNearby(latitude: Double, longitude: Double, sourceLabel: String) {
         isLoading = true
-        loadMessage = "Buscando cargadores reales…"
+        loadMessage = "Buscando cargadores reales cerca de \(sourceLabel)…"
 
         catalog.loadNearby(latitude: latitude, longitude: longitude) { success in
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.isLoading = false
-                self.loadMessage = success
-                    ? "OpenStreetMap · datos reales cargados"
-                    : "Sin conexión · usando datos demo"
+                if success {
+                    self.lastLoadedLatitude = latitude
+                    self.lastLoadedLongitude = longitude
+                    self.loadMessage = "OpenStreetMap · cargadores reales cerca de \(sourceLabel)"
+                } else {
+                    self.loadMessage = "Sin datos remotos · usando fallback disponible"
+                }
                 self.revision += 1
             }
         }
@@ -41,6 +117,7 @@ final class CatalogViewModel: ObservableObject {
 
 struct ContentView: View {
     @StateObject private var viewModel = CatalogViewModel()
+    @StateObject private var locationProvider = LocationProvider()
 
     private var catalog: CargaCercaCatalog { viewModel.catalog }
 
@@ -59,12 +136,21 @@ struct ContentView: View {
                 .padding(20)
             }
             .refreshable {
-                viewModel.reloadMadrid()
+                if let coordinate = locationProvider.coordinate {
+                    viewModel.loadUserLocation(coordinate)
+                } else {
+                    viewModel.reloadMadrid()
+                    locationProvider.requestLocation()
+                }
             }
         }
         .preferredColorScheme(.dark)
         .onAppear {
             viewModel.loadMadridIfNeeded()
+            locationProvider.requestLocation()
+        }
+        .onReceive(locationProvider.$coordinate.compactMap { $0 }) { coordinate in
+            viewModel.loadUserLocation(coordinate)
         }
     }
 
@@ -103,23 +189,36 @@ struct ContentView: View {
     }
 
     private var dataStatus: some View {
-        HStack(spacing: 12) {
-            if viewModel.isLoading {
-                ProgressView()
-                    .tint(.cyan)
-            } else {
-                Image(systemName: catalog.isUsingRemoteData() ? "network" : "externaldrive")
-                    .foregroundStyle(catalog.isUsingRemoteData() ? Color.green : Color.orange)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                if viewModel.isLoading {
+                    ProgressView()
+                        .tint(.cyan)
+                } else {
+                    Image(systemName: catalog.isUsingRemoteData() ? "network" : "externaldrive")
+                        .foregroundStyle(catalog.isUsingRemoteData() ? Color.green : Color.orange)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(viewModel.loadMessage)
+                        .font(.subheadline.weight(.semibold))
+                    Text(locationProvider.statusText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.loadMessage)
-                    .font(.subheadline.weight(.semibold))
-                Text("Madrid como ubicación inicial · desliza hacia abajo para actualizar")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            Button {
+                locationProvider.requestLocation()
+                if let coordinate = locationProvider.coordinate {
+                    viewModel.loadUserLocation(coordinate)
+                }
+            } label: {
+                Label("Mi ubicación", systemImage: "location.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.cyan)
             }
-            Spacer()
         }
         .padding(14)
         .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
