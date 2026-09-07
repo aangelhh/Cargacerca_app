@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import es.cargacerca.app.model.ChargingStation
 import es.cargacerca.app.model.demoStations
+import es.cargacerca.app.ui.compare.ComparisonScreen
 import es.cargacerca.app.ui.detail.ChargerDetailScreen
 import java.util.Locale
 
@@ -115,6 +116,10 @@ fun CargaCercaHome() {
     ) { innerPadding ->
         when (selectedTab) {
             0 -> ExploreScreen(
+                modifier = Modifier.padding(innerPadding),
+                onStationClick = { selectedStation = it }
+            )
+            1 -> ComparisonScreen(
                 modifier = Modifier.padding(innerPadding),
                 onStationClick = { selectedStation = it }
             )
