@@ -14,7 +14,9 @@ data class ChargingStation(
     val connector: String,
     val latitude: Double,
     val longitude: Double,
-    val isRecommended: Boolean = false
+    val isRecommended: Boolean = false,
+    val availabilityKnown: Boolean = true,
+    val dataSource: String = "Demo"
 )
 
 val demoStations = listOf(
