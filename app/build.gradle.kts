@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "es.cargacerca.app"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "es.cargacerca.app"
@@ -41,7 +41,7 @@ kotlin {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2026.08.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.06.00")
     implementation(composeBom)
 
     implementation("androidx.activity:activity-compose:1.13.0")
