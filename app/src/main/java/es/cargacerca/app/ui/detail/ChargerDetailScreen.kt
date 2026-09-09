@@ -1,5 +1,9 @@
 package es.cargacerca.app.ui.detail
 
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,9 +61,11 @@ private val CardBackground = Color(0xFF0C1B2C)
 fun ChargerDetailScreen(
     station: ChargingStation,
     onBack: () -> Unit,
-    onNavigate: () -> Unit = {},
+    onNavigate: (() -> Unit)? = null,
     onFavorite: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -72,11 +79,14 @@ fun ChargerDetailScreen(
         AvailabilityCard(station)
         KeyMetrics(station)
         ConnectorCard(station)
-        LocationCard(station)
+        LocationCard(
+            station = station,
+            onShowMap = { showStationOnMap(context, station) }
+        )
         LiveInfoCard(station)
         Spacer(Modifier.height(4.dp))
         Button(
-            onClick = onNavigate,
+            onClick = { onNavigate?.invoke() ?: startStationNavigation(context, station) },
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(
@@ -99,6 +109,68 @@ fun ChargerDetailScreen(
             fontSize = 10.sp
         )
     }
+}
+
+private fun startStationNavigation(context: Context, station: ChargingStation) {
+    val latitude = station.latitude
+    val longitude = station.longitude
+
+    val googleNavigation = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("google.navigation:q=$latitude,$longitude")
+    ).setPackage("com.google.android.apps.maps")
+
+    if (googleNavigation.resolveActivity(context.packageManager) != null) {
+        launch(context, googleNavigation)
+        return
+    }
+
+    val geoNavigation = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude")
+    )
+    if (geoNavigation.resolveActivity(context.packageManager) != null) {
+        launch(context, geoNavigation)
+        return
+    }
+
+    launch(
+        context,
+        Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$latitude,$longitude")
+        )
+    )
+}
+
+private fun showStationOnMap(context: Context, station: ChargingStation) {
+    val latitude = station.latitude
+    val longitude = station.longitude
+    val label = Uri.encode(station.name)
+    val geoIntent = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude($label)")
+    )
+
+    if (geoIntent.resolveActivity(context.packageManager) != null) {
+        launch(context, geoIntent)
+        return
+    }
+
+    launch(
+        context,
+        Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://www.google.com/maps/search/?api=1&query=$latitude,$longitude")
+        )
+    )
+}
+
+private fun launch(context: Context, intent: Intent) {
+    if (context !is Activity) {
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(intent) }
 }
 
 @Composable
@@ -321,7 +393,7 @@ private fun ConnectorCard(station: ChargingStation) {
 }
 
 @Composable
-private fun LocationCard(station: ChargingStation) {
+private fun LocationCard(station: ChargingStation, onShowMap: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -333,7 +405,7 @@ private fun LocationCard(station: ChargingStation) {
             Spacer(Modifier.height(8.dp))
             Text(station.address, color = Muted, fontSize = 12.sp)
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp)) {
+            OutlinedButton(onClick = onShowMap, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp)) {
                 Icon(Icons.Rounded.LocationOn, contentDescription = null)
                 Spacer(Modifier.size(7.dp))
                 Text("Ver en el mapa")
