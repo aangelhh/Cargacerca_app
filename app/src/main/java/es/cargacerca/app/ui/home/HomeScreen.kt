@@ -41,6 +41,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,15 +51,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import es.cargacerca.app.data.OpenStreetMapChargingStationRepository
 import es.cargacerca.app.model.ChargingStation
-import es.cargacerca.app.model.demoStations
 import es.cargacerca.app.ui.compare.ComparisonScreen
 import es.cargacerca.app.ui.detail.ChargerDetailScreen
 import es.cargacerca.app.ui.map.ChargerMapScreen
+import es.cargacerca.app.ui.map.lastKnownLocationIfAllowed
 import java.util.Locale
 
 private val Success = Color(0xFF41E29A)
@@ -67,6 +70,10 @@ private val Muted = Color(0xFF91A4B8)
 private val CardBorder = Color(0xFF17314C)
 private val CardBackground = Color(0xFF0C1B2C)
 private val ChipBackground = Color(0xFF10243A)
+
+private const val MADRID_LATITUDE = 40.4168
+private const val MADRID_LONGITUDE = -3.7038
+private const val LIST_RADIUS_METERS = 12_000
 
 private data class BottomDestination(val label: String, val icon: ImageVector)
 
@@ -137,25 +144,50 @@ private fun ExploreScreen(
     modifier: Modifier = Modifier,
     onStationClick: (ChargingStation) -> Unit
 ) {
-    var query by remember { mutableStateOf("") }
-    var availableOnly by remember { mutableStateOf(false) }
-    var fastOnly by remember { mutableStateOf(false) }
-    var showMap by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    val repository = remember { OpenStreetMapChargingStationRepository() }
+    val initialLocation = remember { lastKnownLocationIfAllowed(context) }
 
-    val filteredStations = demoStations.filter { station ->
+    var query by remember { mutableStateOf("") }
+    var fastOnly by remember { mutableStateOf(false) }
+    var ultraFastOnly by remember { mutableStateOf(false) }
+    var ccsOnly by remember { mutableStateOf(false) }
+    var showMap by remember { mutableStateOf(true) }
+    var nearbyStations by remember { mutableStateOf<List<ChargingStation>>(emptyList()) }
+    var loadingStations by remember { mutableStateOf(false) }
+    var listLoaded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showMap) {
+        if (!showMap && !listLoaded) {
+            loadingStations = true
+            val location = lastKnownLocationIfAllowed(context) ?: initialLocation
+            val latitude = location?.latitude ?: MADRID_LATITUDE
+            val longitude = location?.longitude ?: MADRID_LONGITUDE
+            nearbyStations = repository.loadNearby(
+                latitude = latitude,
+                longitude = longitude,
+                radiusMeters = LIST_RADIUS_METERS
+            )
+            listLoaded = true
+            loadingStations = false
+        }
+    }
+
+    val filteredStations = nearbyStations.filter { station ->
         val matchesQuery = query.isBlank() ||
             station.name.contains(query, ignoreCase = true) ||
             station.operator.contains(query, ignoreCase = true) ||
             station.address.contains(query, ignoreCase = true)
-        val matchesAvailability = !availableOnly || station.available > 0
-        val matchesPower = !fastOnly || station.powerKw >= 150
-        matchesQuery && matchesAvailability && matchesPower
+        val matchesFast = !fastOnly || station.powerKw >= 50
+        val matchesUltraFast = !ultraFastOnly || station.powerKw >= 150
+        val matchesConnector = !ccsOnly || station.connector.contains("CCS", ignoreCase = true)
+        matchesQuery && matchesFast && matchesUltraFast && matchesConnector
     }
 
     if (showMap) {
         ChargerMapScreen(
             modifier = modifier,
-            stations = filteredStations,
+            stations = emptyList(),
             onBack = { showMap = false },
             onStationClick = onStationClick
         )
@@ -174,7 +206,7 @@ private fun ExploreScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item { Header() }
+        item { Header(usingLocation = initialLocation != null) }
         item {
             OutlinedTextField(
                 value = query,
@@ -204,29 +236,39 @@ private fun ExploreScreen(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
                     ModernFilterChip(
-                        label = "Disponibles",
-                        selected = availableOnly,
-                        onClick = { availableOnly = !availableOnly }
+                        label = "50+ kW",
+                        selected = fastOnly,
+                        onClick = { fastOnly = !fastOnly }
                     )
                 }
                 item {
                     ModernFilterChip(
                         label = "150+ kW",
-                        selected = fastOnly,
-                        onClick = { fastOnly = !fastOnly }
+                        selected = ultraFastOnly,
+                        onClick = { ultraFastOnly = !ultraFastOnly }
                     )
                 }
-                item { ModernFilterChip("CCS2", false, {}) }
-                item { ModernFilterChip("Precio", false, {}) }
+                item {
+                    ModernFilterChip(
+                        label = "CCS2",
+                        selected = ccsOnly,
+                        onClick = { ccsOnly = !ccsOnly }
+                    )
+                }
             }
         }
         item {
             MapEntryCard(
-                stationCount = filteredStations.size,
+                stationCount = nearbyStations.size,
                 onClick = { showMap = true }
             )
         }
-        item { AvailabilityHero() }
+        item {
+            DataSourceHero(
+                stationCount = nearbyStations.size,
+                loading = loadingStations
+            )
+        }
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -235,34 +277,50 @@ private fun ExploreScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Mejores opciones",
+                        "Cargadores cercanos",
                         color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
                         fontSize = 20.sp
                     )
                     Text(
-                        "Ordenadas por disponibilidad, precio y distancia",
+                        "Ordenados por distancia · ubicación y características reales",
                         color = Muted,
                         fontSize = 12.sp
                     )
                 }
-                Text(
-                    "${filteredStations.size} cerca",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp
-                )
+                if (!loadingStations) {
+                    Text(
+                        "${filteredStations.size} cerca",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
-        items(filteredStations, key = { it.id }) { station ->
-            StationCard(station = station, onClick = { onStationClick(station) })
+        if (loadingStations) {
+            item {
+                Text(
+                    "Buscando cargadores cercanos…",
+                    color = Muted,
+                    fontSize = 13.sp
+                )
+            }
+        } else if (listLoaded && filteredStations.isEmpty()) {
+            item {
+                EmptyStationsCard()
+            }
+        } else {
+            items(filteredStations, key = { it.id }) { station ->
+                StationCard(station = station, onClick = { onStationClick(station) })
+            }
         }
         item { AdPlaceholder() }
     }
 }
 
 @Composable
-private fun Header() {
+private fun Header(usingLocation: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -289,7 +347,11 @@ private fun Header() {
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(16.dp)
                 )
-                Text("Madrid", color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp)
+                Text(
+                    if (usingLocation) "Cerca de ti" else "Madrid",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 12.sp
+                )
             }
         }
     }
@@ -328,13 +390,13 @@ private fun MapEntryCard(stationCount: Int, onClick: () -> Unit) {
                 }
                 Column {
                     Text(
-                        "Ver mapa",
+                        "Volver al mapa",
                         color = MaterialTheme.colorScheme.onBackground,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "$stationCount cargadores · mapa interactivo + GPS",
+                        if (stationCount > 0) "$stationCount puntos cargados · mapa interactivo + GPS" else "Mapa interactivo + GPS",
                         color = Muted,
                         fontSize = 10.sp
                     )
@@ -383,7 +445,7 @@ private fun ModernFilterChip(label: String, selected: Boolean, onClick: () -> Un
 }
 
 @Composable
-private fun AvailabilityHero() {
+private fun DataSourceHero(stationCount: Int, loading: Boolean) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -410,22 +472,55 @@ private fun AvailabilityHero() {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "11 cargadores libres ahora",
+                    when {
+                        loading -> "Actualizando puntos reales…"
+                        stationCount > 0 -> "$stationCount puntos reales cercanos"
+                        else -> "Puntos de recarga reales"
+                    },
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp
                 )
-                Text("Hay 18 puntos rápidos en un radio de 6 km", color = Muted, fontSize = 12.sp)
+                Text(
+                    "OpenStreetMap · disponibilidad y precios en vivo aún no integrados",
+                    color = Muted,
+                    fontSize = 12.sp
+                )
             }
             Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFF123A2B)) {
                 Text(
-                    "EN VIVO",
+                    "REAL",
                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
                     color = Success,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyStationsCard() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = CardBackground,
+        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "No hay resultados para esta búsqueda",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Prueba a quitar filtros o vuelve al mapa y desplázate a otra zona.",
+                color = Muted,
+                fontSize = 11.sp
+            )
         }
     }
 }
@@ -478,7 +573,7 @@ private fun StationCard(station: ChargingStation, onClick: () -> Unit) {
                             )
                             if (station.isRecommended) {
                                 Text(
-                                    "  MEJOR",
+                                    "  CERCA",
                                     color = MaterialTheme.colorScheme.primary,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Black
@@ -488,7 +583,7 @@ private fun StationCard(station: ChargingStation, onClick: () -> Unit) {
                         Text(station.operator, color = Muted, fontSize = 12.sp)
                     }
                 }
-                StatusPill(station.available)
+                StatusPill(station)
             }
 
             Spacer(Modifier.height(13.dp))
@@ -505,14 +600,20 @@ private fun StationCard(station: ChargingStation, onClick: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                MetricPill("${station.powerKw} kW", Icons.Rounded.Bolt, Modifier.weight(1f))
                 MetricPill(
-                    station.pricePerKwh?.let { String.format(Locale.US, "%.2f €/kWh", it) } ?: "Sin precio",
+                    if (station.powerKw > 0) "${station.powerKw} kW" else "Potencia n/d",
+                    Icons.Rounded.Bolt,
+                    Modifier.weight(1f)
+                )
+                MetricPill(
+                    station.pricePerKwh?.let {
+                        String.format(Locale.getDefault(), "%.2f €/kWh", it)
+                    } ?: "Sin precio",
                     Icons.Rounded.Bolt,
                     Modifier.weight(1.2f)
                 )
                 MetricPill(
-                    String.format(Locale.US, "%.1f km", station.distanceKm),
+                    String.format(Locale.getDefault(), "%.1f km", station.distanceKm),
                     Icons.Rounded.LocationOn,
                     Modifier.weight(0.9f)
                 )
@@ -524,26 +625,50 @@ private fun StationCard(station: ChargingStation, onClick: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    AvailabilityLabel("${station.available} libres", Success)
-                    AvailabilityLabel("${station.occupied} ocupados", Warning)
-                    if (station.outOfService > 0) {
-                        AvailabilityLabel("${station.outOfService} fuera", Color(0xFFFF6B6B))
+                if (station.availabilityKnown) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        AvailabilityLabel("${station.available} libres", Success)
+                        AvailabilityLabel("${station.occupied} ocupados", Warning)
                     }
+                } else {
+                    AvailabilityLabel("Ocupación no disponible", Muted)
                 }
-                Text(station.connector, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    station.connector,
+                    color = Muted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
 }
 
 @Composable
-private fun StatusPill(available: Int) {
-    val color = if (available > 0) Success else Color(0xFFFF6B6B)
-    val background = if (available > 0) Color(0xFF123A2B) else Color(0xFF402125)
+private fun StatusPill(station: ChargingStation) {
+    val text: String
+    val color: Color
+    val background: Color
+
+    if (!station.availabilityKnown) {
+        text = "SIN ESTADO"
+        color = Muted
+        background = Color(0xFF10243A)
+    } else if (station.available > 0) {
+        text = "LIBRE"
+        color = Success
+        background = Color(0xFF123A2B)
+    } else {
+        text = "LLENO"
+        color = Color(0xFFFF6B6B)
+        background = Color(0xFF402125)
+    }
+
     Surface(shape = RoundedCornerShape(12.dp), color = background) {
         Text(
-            if (available > 0) "LIBRE" else "LLENO",
+            text,
             modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
             color = color,
             fontSize = 10.sp,
