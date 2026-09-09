@@ -114,17 +114,21 @@ fun requestFreshLocation(
 
 @SuppressLint("MissingPermission")
 private fun bestLastKnownLocation(locationManager: LocationManager): Location? {
-    return listOf(
+    val candidates = listOf(
         LocationManager.GPS_PROVIDER,
         LocationManager.NETWORK_PROVIDER,
         LocationManager.PASSIVE_PROVIDER
-    )
-        .mapNotNull { provider ->
-            runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
+    ).mapNotNull { provider ->
+        runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
+    }
+
+    var best: Location? = null
+    for (candidate in candidates) {
+        if (isBetterLocation(candidate, best)) {
+            best = candidate
         }
-        .fold<Location?>(null) { best, candidate ->
-            if (isBetterLocation(candidate, best)) candidate else best
-        }
+    }
+    return best
 }
 
 private fun isBetterLocation(candidate: Location, current: Location?): Boolean {
