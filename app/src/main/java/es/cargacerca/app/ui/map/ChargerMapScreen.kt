@@ -1,6 +1,8 @@
 package es.cargacerca.app.ui.map
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.graphics.Color as AndroidColor
 import android.location.Location
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,12 +55,15 @@ import org.maplibre.android.MapLibre
 import org.maplibre.android.annotations.MarkerOptions
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.LocationComponentOptions
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.Style
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private const val MAP_STYLE = "https://demotiles.maplibre.org/style.json"
+private const val MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
 private const val MADRID_LATITUDE = 40.4168
 private const val MADRID_LONGITUDE = -3.7038
 private val Panel = Color(0xEE081522)
@@ -67,6 +72,7 @@ private val Muted = Color(0xFF91A4B8)
 private val Success = Color(0xFF41E29A)
 
 @Composable
+@SuppressLint("MissingPermission")
 fun ChargerMapScreen(
     stations: List<ChargingStation>,
     onBack: () -> Unit,
@@ -91,7 +97,8 @@ fun ChargerMapScreen(
     var loadingRealData by remember { mutableStateOf(true) }
     var realDataLoaded by remember { mutableStateOf(false) }
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
-    var styleReady by remember { mutableStateOf(false) }
+    var loadedStyle by remember { mutableStateOf<Style?>(null) }
+    var locationPuckActivated by remember { mutableStateOf(false) }
     val currentStations by rememberUpdatedState(mapStations)
 
     fun acceptLocation(location: Location) {
@@ -138,9 +145,9 @@ fun ChargerMapScreen(
         }
     }
 
-    LaunchedEffect(mapStations, mapInstance, styleReady, userLocation) {
+    LaunchedEffect(mapStations, mapInstance, loadedStyle) {
         val map = mapInstance ?: return@LaunchedEffect
-        if (!styleReady) return@LaunchedEffect
+        if (loadedStyle == null) return@LaunchedEffect
         @Suppress("DEPRECATION")
         map.clear()
         mapStations.forEach { station ->
@@ -151,23 +158,44 @@ fun ChargerMapScreen(
                     .snippet(station.id)
             )
         }
-        userLocation?.let { location ->
-            map.addMarker(
-                MarkerOptions()
-                    .position(LatLng(location.latitude, location.longitude))
-                    .title("Tu ubicación")
-                    .snippet("user-location")
-            )
-        }
     }
 
-    LaunchedEffect(userLocation, mapInstance, styleReady) {
+    LaunchedEffect(userLocation, mapInstance, loadedStyle) {
         val location = userLocation ?: return@LaunchedEffect
         val map = mapInstance ?: return@LaunchedEffect
-        if (!styleReady) return@LaunchedEffect
+        val style = loadedStyle ?: return@LaunchedEffect
+
+        if (!locationPuckActivated && hasLocationPermission(context)) {
+            val blue = AndroidColor.rgb(30, 112, 255)
+            val options = LocationComponentOptions.builder(context)
+                .foregroundTintColor(blue)
+                .backgroundTintColor(AndroidColor.WHITE)
+                .accuracyColor(blue)
+                .accuracyAlpha(0.18f)
+                .pulseEnabled(true)
+                .pulseColor(blue)
+                .pulseAlpha(0.25f)
+                .pulseMaxRadius(34f)
+                .build()
+
+            val activationOptions = LocationComponentActivationOptions
+                .builder(context, style)
+                .locationComponentOptions(options)
+                .useDefaultLocationEngine(false)
+                .build()
+
+            map.locationComponent.activateLocationComponent(activationOptions)
+            map.locationComponent.isLocationComponentEnabled = true
+            locationPuckActivated = true
+        }
+
+        if (locationPuckActivated) {
+            map.locationComponent.forceLocationUpdate(location)
+        }
+
         map.cameraPosition = CameraPosition.Builder()
             .target(LatLng(location.latitude, location.longitude))
-            .zoom(16.0)
+            .zoom(16.5)
             .build()
     }
 
@@ -198,8 +226,8 @@ fun ChargerMapScreen(
                 mapView.apply {
                     getMapAsync { map ->
                         mapInstance = map
-                        map.setStyle(MAP_STYLE) {
-                            styleReady = true
+                        map.setStyle(MAP_STYLE) { style ->
+                            loadedStyle = style
                             map.cameraPosition = CameraPosition.Builder()
                                 .target(LatLng(searchOrigin.first, searchOrigin.second))
                                 .zoom(if (initialLocation != null) 14.5 else 11.7)
