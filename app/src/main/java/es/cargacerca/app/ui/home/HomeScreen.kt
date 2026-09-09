@@ -140,7 +140,7 @@ private fun ExploreScreen(
     var query by remember { mutableStateOf("") }
     var availableOnly by remember { mutableStateOf(false) }
     var fastOnly by remember { mutableStateOf(false) }
-    var showMap by remember { mutableStateOf(false) }
+    var showMap by remember { mutableStateOf(true) }
 
     val filteredStations = demoStations.filter { station ->
         val matchesQuery = query.isBlank() ||
