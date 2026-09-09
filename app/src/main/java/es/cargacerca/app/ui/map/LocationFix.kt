@@ -122,7 +122,7 @@ private fun bestLastKnownLocation(locationManager: LocationManager): Location? {
         .mapNotNull { provider ->
             runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
         }
-        .fold<Location, Location?>(null) { best, candidate ->
+        .fold<Location?>(null) { best, candidate ->
             if (isBetterLocation(candidate, best)) candidate else best
         }
 }
