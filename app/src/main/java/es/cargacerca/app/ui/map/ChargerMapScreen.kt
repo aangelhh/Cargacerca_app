@@ -1,11 +1,7 @@
 package es.cargacerca.app.ui.map
 
 import android.Manifest
-import android.annotation.SuppressLint
-import android.content.Context
-import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -60,6 +56,7 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private const val MAP_STYLE = "https://demotiles.maplibre.org/style.json"
 private const val MADRID_LATITUDE = 40.4168
@@ -86,12 +83,32 @@ fun ChargerMapScreen(
         )
     }
     var userLocation by remember { mutableStateOf(initialLocation) }
+    var locationAccuracyMeters by remember {
+        mutableStateOf(initialLocation?.takeIf { it.hasAccuracy() }?.accuracy)
+    }
+    var locating by remember { mutableStateOf(false) }
     var mapStations by remember { mutableStateOf(stations) }
     var loadingRealData by remember { mutableStateOf(true) }
     var realDataLoaded by remember { mutableStateOf(false) }
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
     val currentStations by rememberUpdatedState(mapStations)
+
+    fun acceptLocation(location: Location) {
+        userLocation = location
+        locationAccuracyMeters = location.takeIf { it.hasAccuracy() }?.accuracy
+        searchOrigin = location.latitude to location.longitude
+    }
+
+    fun locatePrecisely() {
+        if (!hasLocationPermission(context)) return
+        locating = true
+        requestFreshLocation(
+            context = context,
+            onLocation = ::acceptLocation,
+            onFinished = { locating = false }
+        )
+    }
 
     LaunchedEffect(searchOrigin) {
         loadingRealData = true
@@ -144,16 +161,29 @@ fun ChargerMapScreen(
         }
     }
 
+    LaunchedEffect(userLocation, mapInstance, styleReady) {
+        val location = userLocation ?: return@LaunchedEffect
+        val map = mapInstance ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        map.cameraPosition = CameraPosition.Builder()
+            .target(LatLng(location.latitude, location.longitude))
+            .zoom(16.0)
+            .build()
+    }
+
+    LaunchedEffect(Unit) {
+        if (hasLocationPermission(context)) {
+            locatePrecisely()
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) {
-            centerOnLastKnownLocation(context, mapInstance)?.let { location ->
-                userLocation = location
-                searchOrigin = location.latitude to location.longitude
-            }
+            locatePrecisely()
         }
     }
 
@@ -172,7 +202,7 @@ fun ChargerMapScreen(
                             styleReady = true
                             map.cameraPosition = CameraPosition.Builder()
                                 .target(LatLng(searchOrigin.first, searchOrigin.second))
-                                .zoom(11.7)
+                                .zoom(if (initialLocation != null) 14.5 else 11.7)
                                 .build()
                         }
                         @Suppress("DEPRECATION")
@@ -228,6 +258,17 @@ fun ChargerMapScreen(
                         color = Muted,
                         fontSize = 10.sp
                     )
+                    Text(
+                        when {
+                            locating -> "Buscando ubicación GPS precisa…"
+                            userLocation != null && locationAccuracyMeters != null ->
+                                "Tu ubicación · precisión ±${locationAccuracyMeters!!.roundToInt()} m"
+                            userLocation != null -> "Tu ubicación encontrada"
+                            else -> "Pulsa el botón GPS para centrarte"
+                        },
+                        color = if (userLocation != null && !locating) Success else Muted,
+                        fontSize = 9.sp
+                    )
                 }
             }
         }
@@ -241,12 +282,10 @@ fun ChargerMapScreen(
             shadowElevation = 10.dp
         ) {
             IconButton(
+                enabled = !locating,
                 onClick = {
                     if (hasLocationPermission(context)) {
-                        centerOnLastKnownLocation(context, mapInstance)?.let { location ->
-                            userLocation = location
-                            searchOrigin = location.latitude to location.longitude
-                        }
+                        locatePrecisely()
                     } else {
                         permissionLauncher.launch(
                             arrayOf(
@@ -259,7 +298,7 @@ fun ChargerMapScreen(
             ) {
                 Icon(
                     Icons.Rounded.MyLocation,
-                    contentDescription = "Mi ubicación",
+                    contentDescription = "Mi ubicación precisa",
                     tint = Color(0xFF04101B)
                 )
             }
@@ -386,40 +425,4 @@ private fun SmallMetric(icon: androidx.compose.ui.graphics.vector.ImageVector, t
         Spacer(Modifier.size(4.dp))
         Text(text, color = Color.White, fontSize = 9.sp, maxLines = 1)
     }
-}
-
-private fun hasLocationPermission(context: Context): Boolean {
-    return context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-        context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-}
-
-@SuppressLint("MissingPermission")
-private fun lastKnownLocationIfAllowed(context: Context): Location? {
-    if (!hasLocationPermission(context)) return null
-    val manager = context.getSystemService(LocationManager::class.java) ?: return null
-    return lastKnownLocation(manager)
-}
-
-@SuppressLint("MissingPermission")
-private fun centerOnLastKnownLocation(context: Context, map: MapLibreMap?): Location? {
-    if (map == null || !hasLocationPermission(context)) return null
-    val locationManager = context.getSystemService(LocationManager::class.java) ?: return null
-    val location = lastKnownLocation(locationManager) ?: return null
-    map.cameraPosition = CameraPosition.Builder()
-        .target(LatLng(location.latitude, location.longitude))
-        .zoom(14.5)
-        .build()
-    return location
-}
-
-@SuppressLint("MissingPermission")
-private fun lastKnownLocation(locationManager: LocationManager): Location? {
-    val providers = listOf(
-        LocationManager.GPS_PROVIDER,
-        LocationManager.NETWORK_PROVIDER,
-        LocationManager.PASSIVE_PROVIDER
-    )
-    return providers
-        .mapNotNull { provider -> runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull() }
-        .maxByOrNull { it.time }
 }
