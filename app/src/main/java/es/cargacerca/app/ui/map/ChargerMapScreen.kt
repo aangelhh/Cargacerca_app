@@ -146,7 +146,6 @@ fun ChargerMapScreen(
             mapStations = realStations
             realDataLoaded = true
         } else if (realDataLoaded) {
-            // A successful move into an area without returned chargers must not keep stale pins.
             mapStations = emptyList()
         }
         loadingRealData = false
@@ -222,9 +221,7 @@ fun ChargerMapScreen(
     }
 
     LaunchedEffect(Unit) {
-        if (hasLocationPermission(context)) {
-            locatePrecisely()
-        }
+        if (hasLocationPermission(context)) locatePrecisely()
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -232,9 +229,7 @@ fun ChargerMapScreen(
     ) { permissions ->
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (granted) {
-            locatePrecisely()
-        }
+        if (granted) locatePrecisely()
     }
 
     Box(
@@ -257,26 +252,26 @@ fun ChargerMapScreen(
                                 .build()
                         }
 
-                        // Only query after the user finishes moving/zooming the map. This keeps
-                        // network traffic low while making pins follow the visible area.
                         map.addOnCameraIdleListener {
                             val target = map.cameraPosition.target
-                            val newRadius = radiusForZoom(map.cameraPosition.zoom)
-                            val area = currentSearchArea
-                            val movedMeters = distanceMeters(
-                                area.latitude,
-                                area.longitude,
-                                target.latitude,
-                                target.longitude
-                            )
-                            val refreshDistance = maxOf(900f, area.radiusMeters * 0.32f)
-
-                            if (movedMeters >= refreshDistance || newRadius != area.radiusMeters) {
-                                searchArea = MapSearchArea(
-                                    latitude = target.latitude,
-                                    longitude = target.longitude,
-                                    radiusMeters = newRadius
+                            if (target != null) {
+                                val newRadius = radiusForZoom(map.cameraPosition.zoom)
+                                val area = currentSearchArea
+                                val movedMeters = distanceMeters(
+                                    area.latitude,
+                                    area.longitude,
+                                    target.latitude,
+                                    target.longitude
                                 )
+                                val refreshDistance = maxOf(900f, area.radiusMeters * 0.32f)
+
+                                if (movedMeters >= refreshDistance || newRadius != area.radiusMeters) {
+                                    searchArea = MapSearchArea(
+                                        latitude = target.latitude,
+                                        longitude = target.longitude,
+                                        radiusMeters = newRadius
+                                    )
+                                }
                             }
                         }
 
@@ -286,9 +281,7 @@ fun ChargerMapScreen(
                             if (station != null) {
                                 onStationClick(station)
                                 true
-                            } else {
-                                false
-                            }
+                            } else false
                         }
                     }
                 }
@@ -305,11 +298,7 @@ fun ChargerMapScreen(
         ) {
             Surface(shape = CircleShape, color = Panel, shadowElevation = 8.dp) {
                 IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.Rounded.ArrowBack,
-                        contentDescription = "Volver a lista",
-                        tint = Color.White
-                    )
+                    Icon(Icons.Rounded.ArrowBack, contentDescription = "Volver a lista", tint = Color.White)
                 }
             }
 
@@ -318,12 +307,7 @@ fun ChargerMapScreen(
                     modifier = Modifier.padding(horizontal = 15.dp, vertical = 9.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    Text(
-                        "Mapa de cargadores",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
+                    Text("Mapa de cargadores", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text(
                         when {
                             loadingRealData -> "Actualizando cargadores de esta zona…"
@@ -354,9 +338,7 @@ fun ChargerMapScreen(
         }
 
         Surface(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 16.dp),
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primary,
             shadowElevation = 10.dp
@@ -500,12 +482,7 @@ private fun MapStationCard(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    station.connector,
-                    color = Muted,
-                    fontSize = 9.sp,
-                    maxLines = 1
-                )
+                Text(station.connector, color = Muted, fontSize = 9.sp, maxLines = 1)
             }
         }
     }
