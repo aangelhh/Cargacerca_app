@@ -71,6 +71,12 @@ private val CardBackground = Color(0xF20C1B2C)
 private val Muted = Color(0xFF91A4B8)
 private val Success = Color(0xFF41E29A)
 
+private data class MapSearchArea(
+    val latitude: Double,
+    val longitude: Double,
+    val radiusMeters: Int
+)
+
 @Composable
 @SuppressLint("MissingPermission")
 fun ChargerMapScreen(
@@ -82,10 +88,15 @@ fun ChargerMapScreen(
     val context = LocalContext.current
     val repository = remember { OpenStreetMapChargingStationRepository() }
     val initialLocation = remember { lastKnownLocationIfAllowed(context) }
-    var searchOrigin by remember {
+    val initialZoom = if (initialLocation != null) 14.5 else 11.7
+
+    var searchArea by remember {
         mutableStateOf(
-            initialLocation?.let { it.latitude to it.longitude }
-                ?: (MADRID_LATITUDE to MADRID_LONGITUDE)
+            MapSearchArea(
+                latitude = initialLocation?.latitude ?: MADRID_LATITUDE,
+                longitude = initialLocation?.longitude ?: MADRID_LONGITUDE,
+                radiusMeters = radiusForZoom(initialZoom)
+            )
         )
     }
     var userLocation by remember { mutableStateOf(initialLocation) }
@@ -99,12 +110,18 @@ fun ChargerMapScreen(
     var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     var loadedStyle by remember { mutableStateOf<Style?>(null) }
     var locationPuckActivated by remember { mutableStateOf(false) }
+
     val currentStations by rememberUpdatedState(mapStations)
+    val currentSearchArea by rememberUpdatedState(searchArea)
 
     fun acceptLocation(location: Location) {
         userLocation = location
         locationAccuracyMeters = location.takeIf { it.hasAccuracy() }?.accuracy
-        searchOrigin = location.latitude to location.longitude
+        searchArea = MapSearchArea(
+            latitude = location.latitude,
+            longitude = location.longitude,
+            radiusMeters = radiusForZoom(16.5)
+        )
     }
 
     fun locatePrecisely() {
@@ -117,15 +134,20 @@ fun ChargerMapScreen(
         )
     }
 
-    LaunchedEffect(searchOrigin) {
+    LaunchedEffect(searchArea) {
         loadingRealData = true
         val realStations = repository.loadNearby(
-            latitude = searchOrigin.first,
-            longitude = searchOrigin.second
+            latitude = searchArea.latitude,
+            longitude = searchArea.longitude,
+            radiusMeters = searchArea.radiusMeters
         )
+
         if (realStations.isNotEmpty()) {
             mapStations = realStations
             realDataLoaded = true
+        } else if (realDataLoaded) {
+            // A successful move into an area without returned chargers must not keep stale pins.
+            mapStations = emptyList()
         }
         loadingRealData = false
     }
@@ -228,11 +250,36 @@ fun ChargerMapScreen(
                         mapInstance = map
                         map.setStyle(MAP_STYLE) { style ->
                             loadedStyle = style
+                            val area = currentSearchArea
                             map.cameraPosition = CameraPosition.Builder()
-                                .target(LatLng(searchOrigin.first, searchOrigin.second))
-                                .zoom(if (initialLocation != null) 14.5 else 11.7)
+                                .target(LatLng(area.latitude, area.longitude))
+                                .zoom(initialZoom)
                                 .build()
                         }
+
+                        // Only query after the user finishes moving/zooming the map. This keeps
+                        // network traffic low while making pins follow the visible area.
+                        map.addOnCameraIdleListener {
+                            val target = map.cameraPosition.target
+                            val newRadius = radiusForZoom(map.cameraPosition.zoom)
+                            val area = currentSearchArea
+                            val movedMeters = distanceMeters(
+                                area.latitude,
+                                area.longitude,
+                                target.latitude,
+                                target.longitude
+                            )
+                            val refreshDistance = maxOf(900f, area.radiusMeters * 0.32f)
+
+                            if (movedMeters >= refreshDistance || newRadius != area.radiusMeters) {
+                                searchArea = MapSearchArea(
+                                    latitude = target.latitude,
+                                    longitude = target.longitude,
+                                    radiusMeters = newRadius
+                                )
+                            }
+                        }
+
                         @Suppress("DEPRECATION")
                         map.setOnMarkerClickListener { marker ->
                             val station = currentStations.firstOrNull { it.id == marker.snippet }
@@ -279,12 +326,17 @@ fun ChargerMapScreen(
                     )
                     Text(
                         when {
-                            loadingRealData -> "Cargando puntos reales…"
-                            realDataLoaded -> "${mapStations.size} puntos reales · OpenStreetMap"
+                            loadingRealData -> "Actualizando cargadores de esta zona…"
+                            realDataLoaded -> "${mapStations.size} puntos reales · mueve el mapa para actualizar"
                             else -> "${mapStations.size} estaciones demo · sin conexión"
                         },
                         color = Muted,
                         fontSize = 10.sp
+                    )
+                    Text(
+                        "Búsqueda eficiente · radio ${searchArea.radiusMeters / 1000} km",
+                        color = Muted,
+                        fontSize = 9.sp
                     )
                     Text(
                         when {
@@ -354,6 +406,24 @@ fun ChargerMapScreen(
             }
         }
     }
+}
+
+private fun radiusForZoom(zoom: Double): Int = when {
+    zoom >= 15.0 -> 3_000
+    zoom >= 13.0 -> 7_000
+    zoom >= 11.0 -> 15_000
+    else -> 25_000
+}
+
+private fun distanceMeters(
+    latitudeA: Double,
+    longitudeA: Double,
+    latitudeB: Double,
+    longitudeB: Double
+): Float {
+    val result = FloatArray(1)
+    Location.distanceBetween(latitudeA, longitudeA, latitudeB, longitudeB, result)
+    return result[0]
 }
 
 @Composable
