@@ -1,0 +1,70 @@
+name: iOS CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+      - 'feature/**'
+    paths:
+      - 'shared/**'
+      - 'iosApp/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'shared/**'
+      - 'iosApp/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/ios.yml'
+
+concurrency:
+  group: ios-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 9.6
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+
+      - name: Build Kotlin framework for iPhone simulator
+        run: gradle :shared:linkDebugFrameworkIosSimulatorArm64 --stacktrace
+
+      - name: Build iOS app
+        run: |
+          xcodebuild \
+            -project iosApp/CargaCercaIOS.xcodeproj \
+            -scheme CargaCercaIOS \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -derivedDataPath ios-build \
+            -destination 'generic/platform=iOS Simulator' \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Upload iOS simulator app
+        uses: actions/upload-artifact@v4
+        with:
+          name: CargaCerca-ios-simulator
+          path: ios-build/Build/Products/Debug-iphonesimulator/CargaCerca.app
+          retention-days: 7
